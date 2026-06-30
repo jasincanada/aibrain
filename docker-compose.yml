@@ -1,0 +1,80 @@
+name: aibrain
+
+services:
+  couchdb:
+    image: couchdb:3.3
+    container_name: aibrain-couchdb
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      COUCHDB_USER: ${COUCHDB_USER}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
+      COUCHDB_SECRET: ${COUCHDB_SECRET}
+      TZ: ${TZ:-America/Vancouver}
+    ports:
+      - "${COUCHDB_BIND:-127.0.0.1}:${COUCHDB_PORT:-5984}:5984"
+    volumes:
+      - aibrain_couchdb_data:/opt/couchdb/data
+      - ./sync/config/local.ini:/opt/couchdb/etc/local.d/aibrain.ini:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5984/_up"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - aibrain
+
+  obsidian:
+    image: ghcr.io/sytone/obsidian-remote:latest
+    container_name: aibrain-obsidian
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-America/Vancouver}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      PASSWORD: ${OBSIDIAN_PASSWORD}
+    ports:
+      - "${OBSIDIAN_BIND:-127.0.0.1}:${OBSIDIAN_PORT:-8080}:8080"
+    volumes:
+      - aibrain_obsidian_vault:/vaults
+      - aibrain_obsidian_config:/config
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    networks:
+      - aibrain
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: aibrain-ollama
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-24h}
+      TZ: ${TZ:-America/Vancouver}
+    ports:
+      - "${OLLAMA_BIND:-127.0.0.1}:${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - aibrain_ollama:/root/.ollama
+    networks:
+      - aibrain
+
+networks:
+  aibrain:
+    name: aibrain
+
+volumes:
+  aibrain_couchdb_data:
+    external: true
+  aibrain_obsidian_vault:
+    external: true
+  aibrain_obsidian_config:
+    external: true
+  aibrain_ollama:
+    external: true
